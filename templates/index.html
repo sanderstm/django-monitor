@@ -216,7 +216,7 @@
         let interval = 10;
         ramChart.setOption(option = {
           title: {
-            subtext: 'Uso de RAM | Total: ' + parseFloat(genData.ramData.total) + ' GB' // Actualiza el total en el título
+            subtext: 'Uso de RAM | Total: ' + Math.ceil(genData.ramData.total) + ' GB' // Actualiza el total en el título
         },
           tooltip: {
               trigger: 'axis'
@@ -233,7 +233,7 @@
           },
           yAxis: {
               type: 'value',
-              max:parseInt(genData.ramData.total),
+              max:Math.ceil(genData.ramData.total),
               interval: interval // Establezco el intervalo
           },
           series: [
