@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Monitor | Servidor Cloud</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  </head>
+  <body>
+    <h2 class="text-center font-bold uppercase py-8 text-2xl">gráficas de rendimiento de equipo</h2>
+    <div class="w-full flex flex-row flex-wrap">
+      <div class="w-full md:w-1/2 xl:w-1/2 border border-indigo-200 p-4">
+        {% comment %} <label for="api-input">Ingresar sitio para monitorear</label> {% endcomment %}
+        <div class="flex justify-center space-x-2">
+          <input type="text" id="api-url" placeholder="Ingrese la URL" class="border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 w-64" />
+          <button id="check-api" class="bg-blue-500 text-white rounded-lg px-4 py-2 hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500">Monitorear</button>
+        </div>
+        <div class="w-full" style="height: 400px" id="api-chart"></div>
+      </div>
+      <div class="w-full md:w-1/2 xl:w-1/2 border border-indigo-200 p-4">
+        <div class="w-full" style="height: 400px" id="db-chart"></div>
+      </div>
+      <div class="w-full md:w-1/2 xl:w-1/3 border border-indigo-200 p-4">
+        <div class="w-full" style="height: 400px" id="ram-chart"></div>
+      </div>
+      <div class="w-full md:w-1/2 xl:w-1/3 border border-indigo-200 p-4">
+        <div class="w-full" style="height: 400px" id="disk-chart"></div>
+      </div>
+      <div class="w-full md:w-1/2 xl:w-1/3 border border-indigo-200 p-4">
+        <div class="w-full" style="height: 400px" id="cpu-chart"></div>
+      </div>
+    </div>
+    <script>
+      let cpuCoresLength;
+      let dataSeries;
+      let cpuChart;
+      let diskChart;
+      let ramChart;
+      let dbChart;
+      let apiChart = echarts.init(document.getElementById('api-chart'));
+      let dbValues = [0,0,0,0,0,0,0];
+      let apiValues = [0,0,0,0,0,0,0];
+      let apiUrl = "https://github.com";
+
+      document.getElementById('check-api').addEventListener('click',(e)=>{
+          apiUrl = document.getElementById('api-url').value;
+      })
+
+      apiChart.setOption({
+        title: {
+          text: `Respuesta y disponibilidad`, 
+          left: 'center',
+          top: 'top' 
+      },
+        xAxis: {
+          type: 'category',
+          data: ['6', '5', '4', '3', '2', '1', '0'],
+          name: 'Numero de peticion', 
+          nameLocation: 'middle',
+          nameGap: 30
+        },
+          yAxis: {
+              type: 'value',
+              name: 'Tiempo de respuesta (ms)', 
+              nameLocation: 'middle',
+              nameGap: 40
+          },
+        series: [
+            {
+                data: apiValues,
+                type: 'bar'
+            }
+        ]
+      })      
+
+      function  customApiFetch(){
+        fetch(`{% url 'api_data' %}?url=${encodeURIComponent(apiUrl)}`).then(response=>response.json()).then(data=>{
+          if (data.status != 200){
+            responseTime = {
+              value: data.ms,
+              itemStyle: {
+                color: '#a90000'
+              }
+            }
+          }
+          else{
+            responseTime = data.ms
+          }
+          apiValues.push(responseTime);
+          apiValues.shift();
+          apiChart.setOption({
+            title: {
+              text: `Respuesta y disponibilidad`, 
+              left: 'center',
+              top: 'top' 
+          },
+          xAxis: {
+            type: 'category',
+            data: ['6', '5', '4', '3', '2', '1', '0'],
+            name: `Numero de peticion | ${data.url} [status: ${data.status}]`, 
+            nameLocation: 'middle',
+            nameGap: 30
+          },
+            yAxis: {
+                type: 'value',
+                name: 'Tiempo de respuesta (ms)', 
+                nameLocation: 'middle',
+                nameGap: 40
+            },
+            series: [
+                {
+                    data: apiValues,
+                    type: 'bar'
+                }
+            ]
+          })
+          setTimeout(()=>{customApiFetch()},2000);
+        });
+        {% comment %} let data = await response.json();
+        let responseTime = data.ms;
+        console.log(data);
+        if (data.status != 200){
+          responseTime = {
+            value: data.ms,
+            itemStyle: {
+              color: '#a90000'
+            }
+          }
+        }
+        return {
+          responseTime,data
+        } {% endcomment %}
+      }
+      async function customDbFetch(){
+        let startTime = performance.now();
+        let responseTime,data;
+        try {
+            let response = await fetch("{% url 'db_data' %}");
+            data = await response.json();
+            let endTime = performance.now();
+            responseTime = endTime - startTime;
+
+            
+            {% comment %} console.log(data); {% endcomment %}
+            if (data.data == false){
+              responseTime = {
+                value: endTime - startTime,
+                itemStyle: {
+                  color: '#a90000'
+                }
+              }
+            }
+        } catch (error) {
+            let endTime = performance.now();
+            responseTime = endTime - startTime;
+            console.log(`Error: ${error}`);
+            
+        }
+        return {
+          responseTime,data
+        }
+      }
+      async function fetchData() {
+        const response = await fetch("{% url 'chart_data' %}")
+        const diskResponse = await fetch("{% url 'disk_data' %}")
+        const cpuResponse = await fetch("{% url 'cpu_data' %}")
+        const ramResponse = await fetch("{% url 'ram_data' %}")
+     
+        const data = await response.json()
+        const diskData = await diskResponse.json()
+        const cpuData = await cpuResponse.json()
+        const ramData = await ramResponse.json()
+        const dbData = await customDbFetch();  
+
+        return { data, diskData, cpuData, ramData, dbData}
+      }
+      customApiFetch();  
+      async function renderCharts() {
+        let genData = await fetchData()
+        {% comment %} console.log(genData) {% endcomment %}
+        //
+        
+        //
+        dbChart = echarts.init(document.getElementById('db-chart'));
+        dbChart.setOption({
+          title: {
+            text: 'Monitor de Tiempo de Respuesta y disponibilidad | DB ', 
+            left: 'center',
+            top: 'top' 
+        },
+          xAxis: {
+            type: 'category',
+            data: ['12', '10', '8', '6', '4', '2', '0'],
+            name: 'Intervalo (cada 2s)', 
+            nameLocation: 'middle',
+            nameGap: 30
+          },
+          yAxis: {
+              type: 'value',
+              name: 'Tiempo de respuesta (ms)', 
+              nameLocation: 'middle',
+              nameGap: 40
+          },
+          series: [
+              {
+                  data: [0, 0, 0, 0, 0, 0, genData.dbData.responseTime],
+                  type: 'bar'
+              }
+          ]
+        })
+
+        //
+        ramChart = echarts.init(document.getElementById('ram-chart'));
+        let interval = 10;
+        ramChart.setOption(option = {
+          title: {
+            subtext: 'Uso de RAM | Total: ' + parseFloat(genData.ramData.total) + ' GB' // Actualiza el total en el título
+        },
+          tooltip: {
+              trigger: 'axis'
+          },
+          legend: {
+            data: ['Espacio Usado', 'Espacio Libre'],
+            top: '5%',
+            left: 'center'
+        },
+          xAxis: {
+              type: 'category',
+              boundaryGap: false,
+              data: ['12s', '10s', '8s', '6s', '4s', '2s', '0s']
+          },
+          yAxis: {
+              type: 'value',
+              max:parseInt(genData.ramData.total),
+              interval: interval // Establezco el intervalo
+          },
+          series: [
+              {
+                  name: 'Uso de RAM',
+                  type: 'line',
+                  areaStyle: {},
+                  data: genData.ramData.data[0]
+              }
+              
+          ]
+      })
+        cpuChart = echarts.init(document.getElementById('cpu-chart'))
+        cpuCoresLength = genData.cpuData.data.length;
+        dataLegend = []
+        dataSeries = []
+        for (let i = 0;i < cpuCoresLength;i++){
+          dataLegend.push(`CPU ${i}`)
+          dataSeries.push({
+            name: `CPU ${i}`,
+            type: 'line',
+            data: genData.cpuData.data[i]
+          })
+        }
+        
+
+        
+        cpuChart.setOption({
+          title: {
+            text: 'CPU'
+          },
+          tooltip: {
+            trigger: 'axis'
+          },
+          legend: {
+            data: dataLegend
+          },
+          grid: {
+            left: '3%',
+            right: '3%',
+            bottom: '3%',
+            containLabel: true
+          },
+          toolbox: {
+            feature: {
+              saveAsImage: {}
+            }
+          },
+          xAxis: {
+            type: 'category',
+            boundaryGap: false,
+            data: ['12s', '10s', '8s', '6s', '4s', '2s', '0s'] // Eje X con tiempo transcurrido en segundos
+          },
+          yAxis: {
+            type: 'value',
+            min: 0,
+            max: 100,
+            axisLabel: {
+              formatter: '{value}%' // Formato del eje Y
+            }
+          },
+          series: dataSeries
+        })
+        diskChart = echarts.init(document.getElementById('disk-chart'))
+        diskChart.setOption({
+          title: {
+            text: `Total ${genData.diskData.total} GB`,
+            left: 'center',
+            top: 'center'
+          },
+          tooltip: {
+            trigger: 'item',
+            formatter: '{a} <br/>{b}: {c} GB ({d}%)'
+          },
+          legend: {
+            top: '0',
+            left: 'center'
+          },
+          series: [
+            {
+              name: 'Espacio en Disco',
+              type: 'pie',
+              radius: ['50%', '70%'], // Ancho del donut
+              avoidLabelOverlap: false,
+              label: {
+                show: true,
+                position: 'outside'
+              },
+              emphasis: {
+                label: {
+                  show: true,
+                  fontSize: '16',
+                  fontWeight: 'bold'
+                }
+              },
+              data: [
+                {
+                  value: genData.diskData.data.used,
+                  name: 'Espacio Usado en Disco | ' + genData.diskData.data.used + ' GB'
+                },
+                {
+                  value: genData.diskData.data.free,
+                  name: 'Espacio Libre en Disco | ' + genData.diskData.data.free + ' GB'
+                }
+              ],
+              itemStyle: {
+                borderRadius: 10,
+                borderColor: '#fff',
+                borderWidth: 2
+              }
+            }
+          ]
+        })
+      }
+      
+      renderCharts()
+     
+      setInterval(async () => {
+        let genData = await fetchData();
+        let dbData = await customDbFetch();
+        dbValues.push(dbData.responseTime);
+        dbValues.shift();
+
+        dbChart.setOption({
+          series: [
+            {
+              data: dbValues,
+              type: 'bar'
+            }
+          ]
+        })
+
+        
+        diskChart.setOption({
+          series: [
+          {
+            name: 'Espacio en Disco',
+            type: 'pie',
+            radius: ['50%', '70%'], // Ancho del donut
+            avoidLabelOverlap: false,
+            label: {
+              show: true,
+              position: 'outside'
+            },
+            emphasis: {
+              label: {
+                show: true,
+                fontSize: '16',
+                fontWeight: 'bold'
+              }
+            },
+            data: [
+              {
+                value: genData.diskData.data.used,
+                name: 'Espacio Usado en Disco | ' + genData.diskData.data.used + ' GB'
+              },
+              {
+                value: genData.diskData.data.free,
+                name: 'Espacio Libre en Disco | ' + genData.diskData.data.free + ' GB'
+              }
+            ],
+            itemStyle: {
+              borderRadius: 10,
+              borderColor: '#fff',
+              borderWidth: 2
+            }
+          }
+        ]
+        })
+
+        
+        cpuCoresLength = genData.cpuData.data.length;
+        dataSeries = []
+        for (let i = 0;i < cpuCoresLength;i++){
+          dataSeries.push({
+            name: `CPU ${i}`,
+            type: 'line',
+            data: genData.cpuData.data[i]
+          })
+        }
+      
+        cpuChart.setOption({
+          series: dataSeries
+        });
+
+        ramChart.setOption({
+          series: [
+              {
+                  name: 'Uso de RAM',
+                  type: 'line',
+                  areaStyle: {},
+                  data: genData.ramData.data[0]
+              }
+          ]
+        })
+      }, 2000) 
+
+      window.addEventListener('resize', function() {
+        diskChart.resize();
+        cpuChart.resize();
+        ramChart.resize();
+        dbChart.resize();
+        apiChart.resize();
+    });
+
+
+    </script>
+  </body>
+</html>
